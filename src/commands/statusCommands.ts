@@ -12,6 +12,7 @@ import { Section } from '../views/general/sectionHeader';
 import { gitRun } from '../utils/gitRawRunner';
 import * as Constants from '../common/constants';
 import { getCommit } from '../utils/commitCache';
+import VSCodeUtils from '../utils/vscodeUtils';
 
 export async function magitRefresh() { }
 
@@ -31,7 +32,8 @@ export async function magitStatus(editor: TextEditor, preserveFocus = false): Pr
         await MagitUtils.magitStatusAndUpdate(repository);
         console.log('Update existing views');
 
-        return workspace.openTextDocument(view.uri).then(doc => window.showTextDocument(doc, { viewColumn: MagitUtils.oppositeActiveViewColumn(), preserveFocus, preview: false }));
+        return workspace.openTextDocument(view.uri).then(doc => window.showTextDocument(doc, { viewColumn: MagitUtils.oppositeActiveViewColumn(), preserveFocus, preview: false })
+          .then(editor => decorateBranches(repository, editor, doc)));
       }
     }
 
@@ -40,13 +42,23 @@ export async function magitStatus(editor: TextEditor, preserveFocus = false): Pr
     const uri = MagitStatusView.encodeLocation(repository);
     views.set(uri.toString(), new MagitStatusView(uri, repository.magitState!));
 
-    return workspace.openTextDocument(uri).then(doc => window.showTextDocument(doc, { viewColumn: MagitUtils.oppositeActiveViewColumn(), preserveFocus, preview: false }));
+    return workspace.openTextDocument(uri).then(doc => window.showTextDocument(doc, { viewColumn: MagitUtils.oppositeActiveViewColumn(), preserveFocus, preview: false })
+      .then(editor => decorateBranches(repository, editor, doc)));
 
   } else {
     // Prompt to create repo
     const newRepo = await commands.executeCommand('git.init');
     if (newRepo) {
       return magitStatus(editor);
+    }
+  }
+}
+
+async function decorateBranches(repository: MagitRepository, editor: TextEditor, doc: TextDocument) {
+  if (repository?.magitState?.HEAD) {
+    editor.setDecorations(Constants.BranchDecoration, VSCodeUtils.rangesOfWordInDocument(doc, repository.magitState.HEAD.name));
+    if (repository.magitState.HEAD.upstreamRemote) {
+      editor.setDecorations(Constants.RemoteBranchDecoration, VSCodeUtils.rangesOfWordInDocument(doc, `${repository.magitState.HEAD.upstreamRemote.remote}/${repository.magitState.HEAD.name}`));
     }
   }
 }
